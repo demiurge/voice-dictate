@@ -8,6 +8,7 @@ ROOT="$(pwd)"
 LABEL="com.voicedictate.daemon"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG_DIR="$HOME/Library/Logs"
+APP_SUPPORT="$HOME/Library/Application Support/voice-dictate"
 
 # --- preflight: Apple Silicon only -------------------------------------------
 HOST_ARCH="$(uname -m)"
@@ -43,6 +44,27 @@ echo "==> installing Python dependencies (mlx, mlx-metal, mlx-whisper pull in ~1
 ./.venv/bin/python -c "import mlx.core as mx; a = mx.array([1.0]); assert (a + 1).item() == 2.0" \
     || { echo "error: mlx import/runtime test failed"; exit 1; }
 
+echo "==> provisioning runtime config"
+mkdir -p "$APP_SUPPORT"
+if [[ ! -f "$APP_SUPPORT/presets.json" ]]; then
+    cp "$ROOT/config/presets.default.json" "$APP_SUPPORT/presets.json"
+    echo "    installed default presets.json (Bielik / LM Studio / Ollama)"
+else
+    echo "    presets.json already present — leaving user edits intact"
+fi
+if [[ ! -f "$APP_SUPPORT/config.json" ]]; then
+    cat > "$APP_SUPPORT/config.json" <<'JSON'
+{
+  "active_preset": "bielik-lmstudio",
+  "current_model": "bielik-11b-v3.0-instruct-mlx",
+  "postprocess": false
+}
+JSON
+    echo "    installed default config.json (post-processing off by default)"
+else
+    echo "    config.json already present — leaving user state intact"
+fi
+
 echo "==> generating LaunchAgent plist"
 mkdir -p "$LOG_DIR" "$(dirname "$PLIST")"
 sed \
@@ -75,6 +97,24 @@ VENV_PY="$ROOT/.venv/bin/python"
 # Put the path on the clipboard so it's ready for ⌘V in the file picker.
 printf "%s" "$VENV_PY" | pbcopy 2>/dev/null || true
 
+echo "==> launching menu bar app"
+pkill -x VoiceDictate 2>/dev/null || true
+sleep 0.5
+open "$ROOT/menubar/VoiceDictate.app" 2>/dev/null || true
+
+echo "==> detecting local LLM endpoints (optional, for post-processing)"
+LLM_STATUS=""
+if curl -s --max-time 1 http://localhost:1234/v1/models >/dev/null 2>&1; then
+    N=$(curl -s --max-time 2 http://localhost:1234/v1/models \
+        | python3 -c "import json,sys; print(len(json.load(sys.stdin).get('data', [])))" 2>/dev/null || echo "?")
+    LLM_STATUS="    ✓ LM Studio online at localhost:1234 ($N models)"
+elif curl -s --max-time 1 http://localhost:11434/v1/models >/dev/null 2>&1; then
+    LLM_STATUS="    ✓ Ollama online at localhost:11434"
+else
+    LLM_STATUS="    ℹ  No local LLM detected (install LM Studio or Ollama to enable post-processing)"
+fi
+echo "$LLM_STATUS"
+
 cat <<EOF
 
 ╔══════════════════════════════════════════════════════════════════════════╗
@@ -82,26 +122,44 @@ cat <<EOF
 ╚══════════════════════════════════════════════════════════════════════════╝
 
  1. In the Accessibility panel that is about to open:
-      • click the [ + ] button
-      • press ⌘⇧G in the file picker
-      • the path below is already on your clipboard — just press ⌘V
-      • click Open, then make sure the toggle next to "python" is ON
+      • click [ + ], press ⌘⇧G, paste the path below (⌘V), click Open
+      • make sure the toggle next to "python" is ON
 
-    Path (also copied to clipboard):
+    Path (already on your clipboard):
 
         $VENV_PY
 
- 2. Restart the daemon so it re-checks permissions:
+ 2. Kickstart the daemon so it re-checks permissions:
 
         launchctl kickstart -k gui/\$UID/$LABEL
 
- 3. On first recording macOS will also prompt for the Microphone — allow it.
+ 3. On first recording, allow Microphone access when macOS asks.
 
- 4. (Optional) start the menu bar app and add it to Login Items:
 
-        open $ROOT/menubar/VoiceDictate.app
+Optional — LLM post-processing (OFF by default)
+───────────────────────────────────────────────
+
+ • The daemon now transcribes with Whisper only. To also get punctuation,
+   filler-word removal and phonetic ASR-error repair, run a local LLM:
+     - LM Studio (https://lmstudio.ai)  — load Bielik 11B for Polish
+     - or Ollama (https://ollama.com)   — any OpenAI-compatible server works
+ • Start the server, then click the mic icon in your menu bar:
+     Post-processing (toggle)  →  Preset ▸  →  Model ▸
+   Changes take effect on the next dictation — no daemon restart needed.
+ • To add your own endpoint: menu bar → Edit Presets…
+
+
+Auto-start on login
+───────────────────
+
+ • The daemon (voice recognition) already auto-starts via LaunchAgent.
+ • The menu bar app was just launched. To have it start automatically too:
+   System Settings → General → Login Items → [ + ] → choose
+       $ROOT/menubar/VoiceDictate.app
+
 
  Logs     : $LOG_DIR/voice_dictate.log   $LOG_DIR/voice_dictate.err.log
+ Config   : $APP_SUPPORT/ (config.json, presets.json — managed by menu bar)
  Uninstall: ./uninstall.sh
 
 EOF

@@ -97,6 +97,13 @@ Items → `+` and pick `VoiceDictate.app`.
 
 ## Configuration
 
+There are two layers:
+
+1. **Menu bar + runtime config files** (recommended for post-processing) — see
+   [LLM post-processing via menu bar](#llm-post-processing-via-menu-bar) below.
+2. **Environment variables in the LaunchAgent plist** — used for Whisper
+   settings and as backwards-compatible fallback when no runtime config exists.
+
 Override defaults via environment variables in the LaunchAgent plist (add an
 entry under `EnvironmentVariables`):
 
@@ -138,37 +145,87 @@ Override with your own domain terms:
 Keep it short (a few dozen terms max) — Whisper's prompt is capped at 224
 tokens and longer prompts don't help further.
 
-### 2. `VD_POSTPROCESS=lmstudio` (opt-in, ~200–400 ms extra per utterance)
+### 2. LLM post-processing via menu bar (opt-in, ~200–400 ms extra per utterance)
 
 Pipe the raw transcript through a locally-served LLM for punctuation,
-capitalisation and filler-word cleanup. The daemon sends one chat-completion
-request per utterance over HTTP; on any failure (LM Studio off, timeout,
-bad response) it falls back to the raw transcript so dictation keeps
-working.
+capitalisation, filler-word cleanup and phonetic repair of obvious ASR
+mistranscriptions. The daemon sends one chat-completion request per utterance
+over HTTP; on any failure (endpoint off, timeout, bad response) it falls back
+to the raw transcript so dictation keeps working.
 
 Setup:
 
-1. Install [LM Studio](https://lmstudio.ai), load a Polish-capable instruct
-   model — [Bielik 11B Instruct](https://huggingface.co/speakleash) is an
-   excellent fit and ships in MLX 4-bit/8-bit flavours.
+1. Install [LM Studio](https://lmstudio.ai) (or
+   [Ollama](https://ollama.com) — any OpenAI-compatible server works), load a
+   Polish-capable instruct model —
+   [Bielik 11B Instruct](https://huggingface.co/speakleash) is an excellent
+   fit and ships in MLX 4-bit/8-bit flavours.
 2. In LM Studio, enable the **Local Server** (Developer tab → Start Server)
-   on the default port `1234`.
-3. Add to the LaunchAgent plist:
+   on the default port `1234`. For Ollama the default port is `11434`.
+3. In the VoiceDictate menu bar:
+   - **Post-processing** → toggle on
+   - **Preset ▸** → pick *Bielik (LM Studio)* or *Ollama*
+   - **Model ▸** → pick whichever model is loaded (list is pulled live from
+     `GET /v1/models` on the active preset)
 
-   ```xml
-   <key>VD_POSTPROCESS</key>   <string>lmstudio</string>
-   ```
+Changes are picked up by the next dictation — **no daemon restart needed**.
+The daemon re-reads the runtime config before each utterance.
 
-4. Kickstart the daemon:
+Verify in the log (`~/Library/Logs/voice_dictate.log`) — you should see
+entries like `✓ 5.2s audio → 0.4s ASR + 0.3s LLM: '...'`. If the endpoint is
+not running you will see `[warn] postprocess failed, keeping raw text: ...`
+and the raw Whisper output gets pasted.
 
-   ```bash
-   launchctl kickstart -k gui/$UID/com.voicedictate.daemon
-   ```
+#### Runtime config files
 
-Verify in the log — you should see entries like `✓ 5.2s audio → 0.4s ASR +
-0.3s LLM: '...'`. If LM Studio is not running you will see
-`[warn] LM Studio postprocess failed, keeping raw text: ...` and the raw
-Whisper output gets pasted.
+Two JSONs live under `~/Library/Application Support/voice-dictate/`:
+
+- **`config.json`** — current menu-bar state (don't edit by hand; the menu
+  writes it):
+  ```json
+  {"postprocess": true, "active_preset": "bielik-lmstudio", "current_model": "bielik-11b-v3.0-instruct-mlx"}
+  ```
+- **`presets.json`** — endpoint definitions. Edit via **Edit Presets…** in
+  the menu bar (opens in your default JSON editor). Each preset:
+  ```json
+  {
+    "id": "bielik-lmstudio",
+    "name": "Bielik (LM Studio)",
+    "base_url": "http://localhost:1234/v1",
+    "default_model": "bielik-11b-v3.0-instruct-mlx",
+    "system_prompt": null
+  }
+  ```
+  | Field            | Meaning                                                                 |
+  |------------------|-------------------------------------------------------------------------|
+  | `base_url`       | OpenAI-compatible API base. `/chat/completions` and `/models` are appended automatically. |
+  | `default_model`  | Model selected the first time you activate this preset. `null` = pick any. |
+  | `system_prompt`  | The chat-completion system message. The shipped default is the tuned PL/ASR cleanup prompt; edit it freely to retune the LLM. Set to `null` to fall back to the hard-coded `LMSTUDIO_SYSTEM` in `voice_dictate.py` (safety net if you delete the field by accident). |
+
+Add your own preset by inserting another object into the array. Local
+endpoints only in this release (no API key support yet — planned via
+Keychain).
+
+#### Env-var fallback (advanced)
+
+If `config.json` / `presets.json` are absent, the daemon still honours the
+legacy env vars `VD_POSTPROCESS`, `VD_LMSTUDIO_URL`, `VD_LMSTUDIO_MODEL`
+from the plist — useful for headless setups without the menu bar app.
+
+#### Upgrading from the initial release
+
+If you installed voice-dictate before the menu-bar config existed and set
+`VD_POSTPROCESS=lmstudio` directly in the plist, nothing breaks — those env
+vars are still honored as a fallback. To migrate:
+
+1. Pull the latest code and run `./install.sh` again. The installer seeds
+   `~/Library/Application Support/voice-dictate/{config,presets}.json` but
+   skips them if they already exist, so it's idempotent.
+2. Open the menu bar and toggle **Post-processing** on (with a preset and
+   model selected) — runtime config takes precedence over env vars.
+3. Optionally remove the `VD_POSTPROCESS` / `VD_LMSTUDIO_*` entries from
+   `~/Library/LaunchAgents/com.voicedictate.daemon.plist` and reload the
+   agent (`launchctl bootout ... && launchctl bootstrap ...`). Pure cosmetic.
 
 ### 3. Larger model
 
