@@ -13,7 +13,7 @@ and auto-paste into the active window. No cloud, no API keys.
 ## Szybki start (PL)
 
 ```bash
-git clone https://github.com/YOUR/voice-dictate.git
+git clone https://github.com/demiurge/voice-dictate.git
 cd voice-dictate
 ./install.sh
 ```
