@@ -100,17 +100,88 @@ Items → `+` and pick `VoiceDictate.app`.
 Override defaults via environment variables in the LaunchAgent plist (add an
 entry under `EnvironmentVariables`):
 
-| Variable      | Default                                     | Notes                                                                 |
-|---------------|---------------------------------------------|-----------------------------------------------------------------------|
-| `VD_MODEL`    | `mlx-community/whisper-large-v3-turbo`      | Any MLX Whisper HF repo or local path. `large-v3` is slower but ~1 pp more accurate on PL. |
-| `VD_LANGUAGE` | `pl`                                        | 2-letter code passed to Whisper.                                      |
-| `VD_TRIGGER`  | `alt_r`                                     | A name from [`pynput.keyboard.Key`](https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key), e.g. `f13`, `ctrl_r`. |
+| Variable             | Default                                     | Notes                                                                 |
+|----------------------|---------------------------------------------|-----------------------------------------------------------------------|
+| `VD_MODEL`           | `mlx-community/whisper-large-v3-turbo`      | Any MLX Whisper HF repo or local path. `large-v3` is slower but ~1 pp more accurate on PL. |
+| `VD_LANGUAGE`        | `pl`                                        | 2-letter code passed to Whisper.                                      |
+| `VD_TRIGGER`         | `alt_r`                                     | A name from [`pynput.keyboard.Key`](https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key), e.g. `f13`, `ctrl_r`. |
+| `VD_INITIAL_PROMPT`  | built-in PL/tech list                       | Short string biasing Whisper toward your vocabulary. Set to `""` to disable. |
+| `VD_POSTPROCESS`     | *(unset)*                                   | Set to `lmstudio` to clean the transcript through a local LLM (see below). |
+| `VD_LMSTUDIO_URL`    | `http://localhost:1234/v1/chat/completions` | OpenAI-compatible chat completions endpoint.                          |
+| `VD_LMSTUDIO_MODEL`  | `bielik`                                    | Model id hint sent in the request. LM Studio routes to whatever model is loaded. |
 
 After changing the plist:
 
 ```bash
 launchctl kickstart -k gui/$UID/com.voicedictate.daemon
 ```
+
+## Recognition quality
+
+Two dials are enabled by default and one is opt-in:
+
+### 1. `initial_prompt` (always on)
+
+Whisper accepts a short "context" string that biases the decoder toward the
+vocabulary you actually use. The built-in default covers common PL/tech
+terms (`Claude Code`, `MLX`, `launchd`, `commit`, `repozytorium`, …) so
+domain words get transcribed correctly instead of being guessed from
+similar-sounding Polish.
+
+Override with your own domain terms:
+
+```xml
+<key>VD_INITIAL_PROMPT</key>
+<string>Grafana, Prometheus, kubectl, Istio, gRPC, deployment, rollout, pod, namespace.</string>
+```
+
+Keep it short (a few dozen terms max) — Whisper's prompt is capped at 224
+tokens and longer prompts don't help further.
+
+### 2. `VD_POSTPROCESS=lmstudio` (opt-in, ~200–400 ms extra per utterance)
+
+Pipe the raw transcript through a locally-served LLM for punctuation,
+capitalisation and filler-word cleanup. The daemon sends one chat-completion
+request per utterance over HTTP; on any failure (LM Studio off, timeout,
+bad response) it falls back to the raw transcript so dictation keeps
+working.
+
+Setup:
+
+1. Install [LM Studio](https://lmstudio.ai), load a Polish-capable instruct
+   model — [Bielik 11B Instruct](https://huggingface.co/speakleash) is an
+   excellent fit and ships in MLX 4-bit/8-bit flavours.
+2. In LM Studio, enable the **Local Server** (Developer tab → Start Server)
+   on the default port `1234`.
+3. Add to the LaunchAgent plist:
+
+   ```xml
+   <key>VD_POSTPROCESS</key>   <string>lmstudio</string>
+   ```
+
+4. Kickstart the daemon:
+
+   ```bash
+   launchctl kickstart -k gui/$UID/com.voicedictate.daemon
+   ```
+
+Verify in the log — you should see entries like `✓ 5.2s audio → 0.4s ASR +
+0.3s LLM: '...'`. If LM Studio is not running you will see
+`[warn] LM Studio postprocess failed, keeping raw text: ...` and the raw
+Whisper output gets pasted.
+
+### 3. Larger model
+
+If you need the absolute best quality and can accept ~2× latency, switch to
+the non-turbo `large-v3`:
+
+```xml
+<key>VD_MODEL</key>
+<string>mlx-community/whisper-large-v3</string>
+```
+
+On an M-series Mac this adds roughly 0.5 s per 10 s of audio compared with
+`large-v3-turbo`.
 
 ## Useful commands
 
