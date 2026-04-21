@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.pyc
+
+menubar/VoiceDictate.app/
+
+.DS_Store
+*.log
