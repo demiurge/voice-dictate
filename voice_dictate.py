@@ -46,9 +46,10 @@ TRIGGER_NAME = os.environ.get("VD_TRIGGER", "alt_r")
 TRIGGER_KEY = getattr(keyboard.Key, TRIGGER_NAME)
 
 DEFAULT_INITIAL_PROMPT = (
-    "Claude Code, MLX, Whisper, launchd, LaunchAgent, plist, Python, pip, venv, "
-    "git, repozytorium, commit, merge, pushować, schowek, Accessibility, "
-    "Homebrew, terminal, config, transkrypcja, dyktowanie, skrypt, API, JSON."
+    "Claude Code, MLX, Whisper, Bielik, launchd, LaunchAgent, plist, Python, "
+    "pip, venv, git, repozytorium, commit, merge, pushować, schowek, "
+    "Accessibility, Homebrew, terminal, config, transkrypcja, dyktowanie, "
+    "skrypt, API, JSON, LM Studio."
 )
 INITIAL_PROMPT = os.environ.get("VD_INITIAL_PROMPT", DEFAULT_INITIAL_PROMPT) or None
 
