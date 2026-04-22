@@ -62,7 +62,7 @@ if (-not (Test-Path "$appData\presets.json")) {
 }
 if (-not (Test-Path "$appData\config.json")) {
     $cfg = @{
-        active_preset = "bielik-lmstudio"
+        active_preset = "gemma4-e4b-lmstudio"
         current_model = "gemma-4-e4b-it"
         postprocess = $false
     } | ConvertTo-Json
