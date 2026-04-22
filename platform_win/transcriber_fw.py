@@ -28,7 +28,10 @@ def _bootstrap_cuda_dlls() -> None:
         # nvidia.* are PEP 420 namespace packages — __file__ is None, use __path__.
         bin_dir = os.path.join(pkg.__path__[0], "bin")
         if os.path.isdir(bin_dir):
+            # add_dll_directory affects only this process; PATH is inherited
+            # by ctranslate2's worker child processes.
             os.add_dll_directory(bin_dir)
+            os.environ["PATH"] = bin_dir + os.pathsep + os.environ.get("PATH", "")
 
 
 class FasterWhisperTranscriber(Transcriber):

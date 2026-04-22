@@ -42,8 +42,21 @@ Write-Host "==> smoke-testing CUDA + faster-whisper"
 & .venv\Scripts\python.exe -c @"
 import os, nvidia.cublas, nvidia.cudnn
 for p in (nvidia.cublas, nvidia.cudnn):
-    os.add_dll_directory(os.path.join(p.__path__[0], 'bin'))
+    bin_dir = os.path.join(p.__path__[0], 'bin')
+    os.add_dll_directory(bin_dir)
+    os.environ['PATH'] = bin_dir + os.pathsep + os.environ.get('PATH', '')
 from faster_whisper import WhisperModel
+# Actually run encode() — CT2 spawns worker child processes that need PATH,
+# not just add_dll_directory. The import-only test would miss this.
+import tempfile, numpy as np, soundfile as sf
+with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as t:
+    sf.write(t.name, np.zeros(8000, dtype=np.float32), 16000)
+    wav = t.name
+try:
+    m = WhisperModel('tiny', device='cuda', compute_type='float16')
+    list(m.transcribe(wav, language='en')[0])
+finally:
+    os.unlink(wav)
 print('ctranslate2 + CUDA OK')
 "@
 if ($LASTEXITCODE -ne 0) {
