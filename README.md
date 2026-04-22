@@ -7,6 +7,7 @@ and auto-paste into the active window. No cloud, no API keys.
 - 🎙️ ~0.3–1 s ASR latency for a 10 s utterance on an M-series Mac
 - 🇵🇱 Built and tuned for Polish, works with any Whisper-supported language
 - 🍎 Ships with a tiny Swift menu bar app (Pause/Resume/Restart + live recording indicator)
+- 🪟 Windows (x64 + NVIDIA) via faster-whisper + CUDA 12, with a pystray system tray
 - 🔁 Runs as a LaunchAgent, auto-starts on login
 - 🔒 100% local — model + audio never leave your machine
 
@@ -25,6 +26,31 @@ launchctl kickstart -k gui/$UID/com.voicedictate.daemon
 ```
 
 Trzymaj **prawy ⌥** i mów. Po puszczeniu tekst wklei się w aktywne okno.
+
+## Windows quick start
+
+Requires Windows 10/11 x64, Python 3.10+ from python.org (NOT Microsoft
+Store), NVIDIA GPU with driver ≥ 525.
+
+```powershell
+git clone https://github.com/demiurge/voice-dictate.git
+cd voice-dictate
+powershell -ExecutionPolicy Bypass -File install.ps1
+```
+
+Hold **Right Ctrl** and speak. Release → Whisper transcribes → text is
+pasted into the focused window.
+
+The installer registers two Task Scheduler entries (`VoiceDictateDaemon`,
+`VoiceDictateTray`), both triggered at user logon. Config lives in
+`%APPDATA%\voice-dictate\`, logs in `%LOCALAPPDATA%\voice-dictate\logs\`.
+
+### Why not right Alt?
+
+On Polish/ISO keyboards right Alt is **AltGr** — it's how you type `ą ć ę
+ł ń ó ś ź ż`. Using it as push-to-talk would block those characters.
+Windows default is right Ctrl; override with `VD_TRIGGER` env var in the
+scheduled task if you want something else (e.g. `f13`, `pause`).
 
 ## Requirements
 
@@ -242,6 +268,8 @@ On an M-series Mac this adds roughly 0.5 s per 10 s of audio compared with
 
 ## Useful commands
 
+### macOS
+
 ```bash
 # status
 launchctl list | grep voicedictate
@@ -258,6 +286,22 @@ launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.voicedictate.daemon.plis
 # tail logs
 tail -F ~/Library/Logs/voice_dictate.log
 tail -F ~/Library/Logs/voice_dictate.err.log
+```
+
+### Windows
+
+```powershell
+# status
+schtasks /Query /TN VoiceDictateDaemon /V /FO LIST
+
+# stop / start / restart
+schtasks /End  /TN VoiceDictateDaemon
+schtasks /Run  /TN VoiceDictateDaemon
+schtasks /End  /TN VoiceDictateDaemon; schtasks /Run /TN VoiceDictateDaemon
+
+# tail logs
+Get-Content -Wait $env:LOCALAPPDATA\voice-dictate\logs\voice_dictate.log
+Get-Content -Wait $env:LOCALAPPDATA\voice-dictate\logs\voice_dictate.err.log
 ```
 
 ## Uninstall
@@ -368,6 +412,41 @@ MLX compiles kernels on first run. `install.sh` warms the model up during
 startup, but the very first *real* call after a model change takes an extra
 few seconds.
 
+### Windows: `Could not load library cudnn_ops_infer64_9.dll`
+
+The CUDA DLL bootstrap in `platform_win/transcriber_fw.py` didn't run or
+found empty `nvidia/*` bin directories. Verify:
+
+```powershell
+Test-Path .venv\Lib\site-packages\nvidia\cudnn\bin\cudnn_ops_infer64_9.dll
+Test-Path .venv\Lib\site-packages\nvidia\cublas\bin
+```
+
+If missing, re-run `install.ps1` — it pins `nvidia-cublas-cu12` and
+`nvidia-cudnn-cu12` into the venv.
+
+### Windows: `ModuleNotFoundError: No module named 'nvidia'`
+
+You likely installed `requirements.txt` (the macOS one) instead of
+`requirements-win.txt`. Delete `.venv` and re-run `install.ps1`.
+
+### Windows: `install.ps1` fails with "Microsoft Store Python alias"
+
+The Store ships a stub `python.exe` that redirects to its sandbox. Install
+the real interpreter from [python.org](https://www.python.org/downloads/)
+(or `winget install Python.Python.3.12`) and re-run.
+
+### Windows: tray icon is missing
+
+Windows 11 hides new tray icons in the overflow area — click the `^` next
+to the clock, drag the microphone out onto the visible tray.
+
+### Windows: typing `ą` starts a recording instead
+
+`VD_TRIGGER` in your scheduled task is set to `alt_r`, which is AltGr on
+Polish layouts. Edit `scheduled_tasks\daemon.xml.template` to ensure
+`VD_TRIGGER` is `ctrl_r` (default) or unset, then re-register the task.
+
 ## How it works
 
 ```
@@ -385,6 +464,12 @@ hotkey release ──►  stop stream, dump to WAV
 The LaunchAgent just keeps the Python process alive; the menu bar app is a
 pure remote control on top of `launchctl` plus a `tail -F` on the log file
 for the recording indicator.
+
+On Windows the same flow runs with `mlx_whisper` replaced by
+`faster-whisper` + CUDA 12 and `⌘V` replaced by `Ctrl+V`; the menu bar
+app is replaced by a `pystray` tray, but everything else (the hotkey
+listener, clipboard paste, LLM post-processing loop) is identical and
+lives in `core/`.
 
 ## License
 
