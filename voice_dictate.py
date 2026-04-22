@@ -107,7 +107,8 @@ def stop_and_transcribe() -> None:
         if text:
             paste_text(text)
     finally:
-        mark_recording_end()
+        if not recorder.is_recording:
+            mark_recording_end()
 
 
 def on_press(key) -> None:
@@ -134,6 +135,7 @@ def main() -> None:
         f"  | postprocess: {pp_desc}  [source: {cfg_source}]"
     )
 
+    mark_recording_end()  # clear any stale flag from a prior hard kill
     transcriber = load_transcriber(MODEL, language=LANGUAGE, initial_prompt=PROMPT)
     print("Warming up model…", flush=True)
     transcriber.warmup()
