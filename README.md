@@ -418,7 +418,7 @@ The CUDA DLL bootstrap in `platform_win/transcriber_fw.py` didn't run or
 found empty `nvidia/*` bin directories. Verify:
 
 ```powershell
-Test-Path .venv\Lib\site-packages\nvidia\cudnn\bin\cudnn_ops_infer64_9.dll
+Get-ChildItem .venv\Lib\site-packages\nvidia\cudnn\bin\cudnn_ops_infer64_*.dll
 Test-Path .venv\Lib\site-packages\nvidia\cublas\bin
 ```
 
@@ -443,9 +443,14 @@ to the clock, drag the microphone out onto the visible tray.
 
 ### Windows: typing `ą` starts a recording instead
 
-`VD_TRIGGER` in your scheduled task is set to `alt_r`, which is AltGr on
-Polish layouts. Edit `scheduled_tasks\daemon.xml.template` to ensure
-`VD_TRIGGER` is `ctrl_r` (default) or unset, then re-register the task.
+Something set `VD_TRIGGER=alt_r` on the registered task — `alt_r` is AltGr
+on Polish layouts. The Windows default is `ctrl_r` and `install.ps1` does
+not set `VD_TRIGGER` at all, so this only happens if you added it yourself.
+Open Task Scheduler, find `VoiceDictateDaemon`, clear or change the env
+var on the Actions tab, and restart the task with `schtasks /End /TN
+VoiceDictateDaemon; schtasks /Run /TN VoiceDictateDaemon`. (Alternatively,
+fix `scheduled_tasks\daemon.xml.template` if that's where you added it,
+then re-run `install.ps1` to re-register from the corrected template.)
 
 ## How it works
 
