@@ -6,9 +6,10 @@ Write-Host "==> unregistering Scheduled Tasks"
 Unregister-ScheduledTask -TaskName "VoiceDictateDaemon" -Confirm:$false -ErrorAction SilentlyContinue
 Unregister-ScheduledTask -TaskName "VoiceDictateTray"   -Confirm:$false -ErrorAction SilentlyContinue
 
-# best-effort kill of any running instances
+# best-effort kill of any running instances spawned from THIS repo's venv
+$venvPython = Join-Path $PSScriptRoot ".venv\Scripts\pythonw.exe"
 Get-Process pythonw -ErrorAction SilentlyContinue | Where-Object {
-    $_.MainModule.FileName -like "*voice-dictate*"
+    try { $_.MainModule.FileName -eq $venvPython } catch { $false }
 } | Stop-Process -Force -ErrorAction SilentlyContinue
 
 Write-Host ""

@@ -40,7 +40,7 @@ _ICON_REC = Image.open(_ICON_DIR / "mic_rec.png")
 DAEMON_TASK = "VoiceDictateDaemon"
 
 _models_cache: dict[str, tuple[float, list[str]]] = {}
-_MODELS_TTL = 30.0
+_MODELS_TTL = 120.0
 
 
 def _load_config() -> dict[str, Any]:
@@ -258,7 +258,10 @@ class VDTray:
         while True:
             rec = is_recording()
             if rec != self._last_rec:
-                self.icon.icon = _ICON_REC if rec else _ICON_IDLE
+                try:
+                    self.icon.icon = _ICON_REC if rec else _ICON_IDLE
+                except Exception:
+                    pass  # pystray icon assign is not formally thread-safe
                 self._last_rec = rec
             time.sleep(0.1)
 
