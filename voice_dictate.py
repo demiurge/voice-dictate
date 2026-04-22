@@ -32,6 +32,7 @@ from pynput import keyboard
 from core.audio import AudioRecorder
 from core.config import CONFIG_PATH
 from core.postprocess import lmstudio_cleanup, resolve_postprocess_config
+from core.signal import mark_recording_end, mark_recording_start
 from core.transcriber import load_transcriber
 
 
@@ -71,38 +72,42 @@ transcriber = None  # set in main()
 
 def start_recording() -> None:
     if recorder.start():
+        mark_recording_start()
         print("● rec…", flush=True)
 
 
 def stop_and_transcribe() -> None:
-    wav_path, duration = recorder.stop()
-    if wav_path is None:
-        print("… too short, skipped", flush=True)
-        return
-
-    t0 = time.time()
     try:
-        text = transcriber.transcribe(wav_path)
-    except Exception as e:
-        print(f"[error] transcribe: {e}", file=sys.stderr)
-        return
+        wav_path, duration = recorder.stop()
+        if wav_path is None:
+            print("… too short, skipped", flush=True)
+            return
+
+        t0 = time.time()
+        try:
+            text = transcriber.transcribe(wav_path)
+        except Exception as e:
+            print(f"[error] transcribe: {e}", file=sys.stderr)
+            return
+        finally:
+            Path(wav_path).unlink(missing_ok=True)
+        asr_dt = time.time() - t0
+
+        llm_dt = 0.0
+        pp_cfg = resolve_postprocess_config()
+        if text and pp_cfg is not None:
+            t1 = time.time()
+            text = lmstudio_cleanup(text, pp_cfg)
+            llm_dt = time.time() - t1
+
+        timing = f"{asr_dt:.1f}s ASR"
+        if llm_dt:
+            timing += f" + {llm_dt:.1f}s LLM"
+        print(f"✓ {duration:.1f}s audio → {timing}: {text!r}", flush=True)
+        if text:
+            paste_text(text)
     finally:
-        Path(wav_path).unlink(missing_ok=True)
-    asr_dt = time.time() - t0
-
-    llm_dt = 0.0
-    pp_cfg = resolve_postprocess_config()
-    if text and pp_cfg is not None:
-        t1 = time.time()
-        text = lmstudio_cleanup(text, pp_cfg)
-        llm_dt = time.time() - t1
-
-    timing = f"{asr_dt:.1f}s ASR"
-    if llm_dt:
-        timing += f" + {llm_dt:.1f}s LLM"
-    print(f"✓ {duration:.1f}s audio → {timing}: {text!r}", flush=True)
-    if text:
-        paste_text(text)
+        mark_recording_end()
 
 
 def on_press(key) -> None:
