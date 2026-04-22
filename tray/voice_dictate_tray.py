@@ -7,6 +7,13 @@ schtasks (Start/Stop/Restart) pointed at the VoiceDictateDaemon task.
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# Task Scheduler invokes this as a script (pythonw tray\voice_dictate_tray.py),
+# which puts tray/ on sys.path but not the repo root. Make core/ importable.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import json
 import os
 import subprocess
@@ -14,7 +21,6 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from pathlib import Path
 from typing import Any, Callable
 
 import pystray
