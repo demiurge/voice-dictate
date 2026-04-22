@@ -66,7 +66,10 @@ if (-not (Test-Path "$appData\config.json")) {
         current_model = "gemma-4-e4b-it"
         postprocess = $false
     } | ConvertTo-Json
-    Set-Content -Path "$appData\config.json" -Value $cfg -Encoding UTF8
+    # UTF-8 without BOM — PowerShell 5.1's Set-Content -Encoding UTF8 adds a
+    # BOM that trips Python's json.loads("﻿{..."). Write the raw bytes
+    # with a BOM-less encoder instead.
+    [System.IO.File]::WriteAllText("$appData\config.json", $cfg, (New-Object System.Text.UTF8Encoding $false))
     Write-Host "    installed default config.json (post-processing off)"
 } else {
     Write-Host "    config.json already present — leaving user state intact"

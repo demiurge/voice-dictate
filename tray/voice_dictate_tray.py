@@ -45,7 +45,7 @@ _MODELS_TTL = 120.0
 
 def _load_config() -> dict[str, Any]:
     try:
-        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        return json.loads(CONFIG_PATH.read_text(encoding="utf-8-sig"))
     except (OSError, json.JSONDecodeError):
         return {"postprocess": False, "active_preset": "", "current_model": ""}
 
@@ -59,7 +59,7 @@ def _save_config(cfg: dict[str, Any]) -> None:
 
 def _load_presets() -> list[dict[str, Any]]:
     try:
-        return json.loads(PRESETS_PATH.read_text(encoding="utf-8"))
+        return json.loads(PRESETS_PATH.read_text(encoding="utf-8-sig"))
     except (OSError, json.JSONDecodeError):
         return []
 

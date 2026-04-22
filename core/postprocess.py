@@ -52,10 +52,10 @@ def resolve_postprocess_config() -> dict | None:
     """Return {'url', 'model', 'system_prompt'} or None if disabled."""
     try:
         if CONFIG_PATH.exists() and PRESETS_PATH.exists():
-            cfg = json.loads(CONFIG_PATH.read_text())
+            cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8-sig"))
             if not cfg.get("postprocess"):
                 return None
-            presets = json.loads(PRESETS_PATH.read_text())
+            presets = json.loads(PRESETS_PATH.read_text(encoding="utf-8-sig"))
             active_id = cfg.get("active_preset")
             preset = next((p for p in presets if p.get("id") == active_id), None)
             if preset is None:
