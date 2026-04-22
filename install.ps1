@@ -42,7 +42,7 @@ Write-Host "==> smoke-testing CUDA + faster-whisper"
 & .venv\Scripts\python.exe -c @"
 import os, nvidia.cublas, nvidia.cudnn
 for p in (nvidia.cublas, nvidia.cudnn):
-    os.add_dll_directory(os.path.join(os.path.dirname(p.__file__), 'bin'))
+    os.add_dll_directory(os.path.join(p.__path__[0], 'bin'))
 from faster_whisper import WhisperModel
 print('ctranslate2 + CUDA OK')
 "@

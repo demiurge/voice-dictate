@@ -25,7 +25,8 @@ def _bootstrap_cuda_dlls() -> None:
     import nvidia.cudnn
 
     for pkg in (nvidia.cublas, nvidia.cudnn):
-        bin_dir = os.path.join(os.path.dirname(pkg.__file__), "bin")
+        # nvidia.* are PEP 420 namespace packages — __file__ is None, use __path__.
+        bin_dir = os.path.join(pkg.__path__[0], "bin")
         if os.path.isdir(bin_dir):
             os.add_dll_directory(bin_dir)
 
